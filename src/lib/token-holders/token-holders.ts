@@ -6,6 +6,7 @@ import {
 import { publicClient } from "@/clients/viem";
 import { retryRequest } from "@/lib/utils/utils";
 import { mainnet } from "viem/chains";
+import { progressBar } from "../cli-ui/progress-bar";
 
 export type HoldersBalances = Map<Address, bigint>;
 
@@ -33,6 +34,7 @@ export const fetchEvents = async (
   assetAddress: Address,
   startBlock: bigint,
   endBlock: bigint,
+  displayProgressBar = false,
   {
     fetchSize = 10000n,
     batchSize = 10n,
@@ -54,9 +56,18 @@ export const fetchEvents = async (
   const events = [];
   for (let chunk = startBlock; chunk <= endBlock; chunk += step) {
     const eventsPromise = [];
-    console.log(
-      `Fetching transfer events from block ${chunk} to block ${chunk + step <= endBlock ? chunk + step - 1n : endBlock} over block ${endBlock}`
-    );
+    // console.log(
+    //   `Fetching transfer events from block ${chunk} to block ${chunk + step <= endBlock ? chunk + step - 1n : endBlock} over block ${endBlock}`
+    // );
+    if (displayProgressBar) {
+      progressBar.update(
+        ((Number(chunk) - Number(startBlock)) * 20) /
+          (Number(endBlock) - Number(startBlock)),
+        {
+          nextTask: "Get token events",
+        }
+      );
+    }
     for (
       let fromBlock = chunk;
       fromBlock + fetchSize <= chunk + step && fromBlock <= endBlock;
@@ -106,7 +117,8 @@ export const fetchEvents = async (
 export const getEvents = async (
   token: Token,
   network: Chain,
-  endBlock: bigint
+  endBlock: bigint,
+  displayProgressBar = false
 ): Promise<GetTransferEvents> => {
   if (endBlock < token.deploymentBlock) {
     throw new Error(
@@ -130,7 +142,12 @@ export const getEvents = async (
         ? cache.maxBlock
         : token.deploymentBlock;
 
-    const newEvents = await fetchEvents(token.address, startBlock, endBlock);
+    const newEvents = await fetchEvents(
+      token.address,
+      startBlock,
+      endBlock,
+      displayProgressBar
+    );
 
     events = [...events, ...newEvents];
   }
@@ -236,26 +253,54 @@ export const getTokenHolders = async (
   {
     minTokenAmount = 0n,
     network = mainnet,
+    displayProgressBar = false,
   }: {
     minTokenAmount?: bigint;
     network?: Chain;
+    displayProgressBar?: boolean;
   } = {
     minTokenAmount: 0n,
     network: mainnet,
+    displayProgressBar: false,
   }
 ) => {
-  const transferEvents = await getEvents(token, network, endBlock);
+  if (displayProgressBar)
+    progressBar.start(100, 0, { nextTask: "Get token events" });
+
+  const transferEvents = await getEvents(
+    token,
+    network,
+    endBlock,
+    displayProgressBar
+  );
   if (!transferEvents) {
     throw new Error("Error loading cache");
   }
 
+  if (displayProgressBar)
+    progressBar.update(20, { nextTask: "Compute holders history" });
+
   const holders = computeHistory(transferEvents.events);
+
+  if (displayProgressBar)
+    progressBar.update(40, { nextTask: "Crop holders history" });
 
   const holdersCropped = cropHistory(holders, endBlock);
 
+  if (displayProgressBar)
+    progressBar.update(60, { nextTask: "Compute holders balances" });
+
   const holdersBalances = computeHoldersBalances(holdersCropped);
 
+  if (displayProgressBar)
+    progressBar.update(80, { nextTask: "Filter holders balances" });
+
   const hodlersBalanceFiltered = filterHolders(holdersBalances, minTokenAmount);
+
+  if (displayProgressBar) {
+    progressBar.update(100);
+    progressBar.stop();
+  }
 
   return hodlersBalanceFiltered;
 };

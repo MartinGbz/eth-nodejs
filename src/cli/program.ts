@@ -18,6 +18,11 @@ getTokenHoldersCmd.option(
   "-b, --blockNumber [block_number]",
   "The block number from which to get the balance"
 );
+getTokenHoldersCmd.option(
+  "-p, --progressBar",
+  "Display a progress bar while fetching the token holders",
+  false
+);
 getTokenHoldersCmd.action(getTokenHoldersAction);
 
 export const program = new Command();

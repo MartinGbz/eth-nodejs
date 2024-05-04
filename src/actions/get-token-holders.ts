@@ -8,7 +8,7 @@ export const getTokenHoldersAction = async (
   tokenAddress: string,
   tokenName: string,
   tokenDeploymentBlock: string,
-  { blockNumber }: { blockNumber?: string }
+  { blockNumber, progressBar }: { blockNumber?: string; progressBar?: boolean }
 ) => {
   if (!isAddress(tokenAddress)) {
     throw new Error("Invalid address");
@@ -23,7 +23,9 @@ export const getTokenHoldersAction = async (
     deploymentBlock: BigInt(tokenDeploymentBlock),
   };
 
-  const holders = await getTokenHolders(token, endBlock);
+  const holders = await getTokenHolders(token, endBlock, {
+    displayProgressBar: progressBar,
+  });
 
   const balanceTable = new Table({
     head: [colors.green("Addresses"), colors.green("Balances")],
